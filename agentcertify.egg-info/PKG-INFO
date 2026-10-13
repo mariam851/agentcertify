@@ -1,0 +1,197 @@
+Metadata-Version: 2.4
+Name: agentcertify
+Version: 0.1.0
+Summary: A Statistical Uncertainty & Conformal Risk Control Runtime Framework for LLM Agents
+Author: Mariam Zakaria
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: scipy>=1.10.0
+Requires-Dist: pydantic>=2.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Provides-Extra: transformers
+Requires-Dist: torch>=2.0.0; extra == "transformers"
+Requires-Dist: transformers>=4.35.0; extra == "transformers"
+Dynamic: license-file
+
+# AgentCertify: Statistical Uncertainty & Conformal Risk Control Runtime for LLM Agents
+
+[![PyPI version](https://img.shields.io/pypi/v/agentcertify.svg)](https://pypi.org/project/agentcertify/)
+[![Python versions](https://img.shields.io/pypi/pyversions/agentcertify.svg)](https://pypi.org/project/agentcertify/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+
+A distribution-free runtime verification framework establishing finite-sample statistical risk guarantees against uncalibrated tool execution and compounding hallucinations in multi-agent workflows.
+
+---
+
+## The Core Problem
+
+Autonomous LLM agents and Retrieval-Augmented Generation (RAG) pipelines are increasingly deployed in high-stakes environments (healthcare, automated finance, legal informatics). However, standard agents:
+1. **Lack calibrated error boundaries**: Confident generation does not imply factual correctness.
+2. **Propagate cascaded failures**: Unchecked uncertainty early in an execution graph amplifies into catastrophic downstream errors.
+
+`AgentCertify` bridges statistical learning theory and agent runtime engineering via **Conformal Risk Control (CRC)**. Under exchangeability, it provides rigorous non-asymptotic bounds:
+
+$$\mathbb{E}[\ell(f_\lambda(X), Y) \mid \text{Certified}] \le \alpha$$
+
+where $\alpha$ is a pre-defined user risk budget (e.g., maximum permissible error rate $\le 5\%$).
+
+---
+
+## Installation
+
+To install `agentcertify` via pip:
+
+```bash
+pip install agentcertify
+```
+
+For development dependencies including benchmarking and testing suites:
+
+```bash
+pip install "agentcertify[dev]"
+```
+
+---
+
+## Architectural Workflow & Usage Guide
+
+`AgentCertify` sits directly between the LLM output and real-world tool execution.
+
+### 1. Single-Agent Guardrails with Conformal Risk Control
+
+Calibrate nonconformity thresholds on validation sets and intercept sensitive tool execution:
+
+```python
+from agentcertify.core.risk_control import ConformalRiskController
+from agentcertify.runtime.interceptor import CertifiedAgentInterceptor
+
+# Step 1: Initialize controller with a 5% target risk budget
+controller = ConformalRiskController(alpha=0.05, loss_upper_bound=1.0)
+
+# Step 2: Calibrate over historical uncertainty scores and verification losses
+cal_scores = [0.12, 0.45, 0.88, 0.23, 0.65, 0.15, 0.31]
+cal_losses = [0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0]
+controller.calibrate(cal_scores, cal_losses)
+
+# Step 3: Wrap high-risk execution functions
+interceptor = CertifiedAgentInterceptor(controller=controller)
+
+def execute_financial_wire(account: str, amount: float):
+    return f"Transferred ${amount} to {account}"
+
+# Low uncertainty query (Accepted)
+verdict = interceptor.intercept(
+    score=0.14,
+    action_fn=execute_financial_wire,
+    account="ACC-9921",
+    amount=500.0
+)
+print(verdict.status)  # "CERTIFIED_SUCCESS"
+print(verdict.output)  # "Transferred $500.0 to ACC-9921"
+
+# High uncertainty query (Aborted)
+risky_verdict = interceptor.intercept(
+    score=0.91,
+    action_fn=execute_financial_wire,
+    account="ACC-9921",
+    amount=500.0
+)
+print(risky_verdict.status)  # "ABORTED_UNCERTAIN"
+print(risky_verdict.output)  # None
+```
+
+---
+
+### 2. Multi-Agent Cascade Auditing
+
+Audit error accumulation across multi-step agent topologies using cumulative union bounds:
+
+```python
+from agentcertify.core.cascade import MultiAgentCascadeAuditor
+from agentcertify.runtime.fallback import FallbackHandler, FallbackPolicy
+
+# Set a global risk budget across all collaborating agents (e.g., 10%)
+cascade = MultiAgentCascadeAuditor(total_risk_budget=0.10)
+fallback = FallbackHandler(policy=FallbackPolicy.ABORT)
+
+# Step 1: Retrieval Agent
+cascade.record_step("RetrievalAgent", step_alpha=0.03, uncertainty_score=0.11)
+
+# Step 2: Reasoning Agent
+cascade.record_step("ReasoningAgent", step_alpha=0.04, uncertainty_score=0.19)
+
+# Step 3: Action Agent checks if remaining budget permits execution
+can_proceed = cascade.record_step("ActionAgent", step_alpha=0.05, uncertainty_score=0.52)
+
+if not can_proceed:
+    action = fallback.trigger("Multi-agent error budget exceeded.")
+    print("Execution Blocked:", action)
+```
+
+---
+
+### 3. Auditing Reports & Visual Diagnostics
+
+Evaluate empirical calibration efficiency and format ASCII status boards:
+
+```python
+from agentcertify.reporting.metrics import ConformalMetrics
+from agentcertify.reporting.visualizer import ConformalVisualizer
+
+# Evaluate coverage on test distribution
+summary = ConformalMetrics.compute_audit_summary(
+    accepted_mask=[True, True, True, False, True],
+    losses=[0.0, 0.0, 0.0, 1.0, 0.0],
+    target_alpha=0.05
+)
+
+# Print formatted summary table
+print(ConformalVisualizer.render_ascii_summary(summary))
+```
+
+---
+
+## Repository Structure
+
+```text
+agentcertify/
+├── agentcertify/
+│   ├── core/           # Mathematical optimization & multi-agent cascade bounds
+│   ├── scoring/        # Shannon entropy, logprobs & JSON schema verifiers
+│   ├── runtime/        # Execution interceptors & fallback handlers
+│   ├── wrappers/       # Adapter layer for open-source & API LLMs
+│   └── reporting/      # Empirical metrics & diagnostic logging
+├── examples/           # End-to-end runnable scripts
+├── tests/              # Rigorous mathematical property & integration tests
+└── pyproject.toml      # Build metadata & dependency specifications
+```
+
+---
+
+## Citation
+
+If you use `AgentCertify` in your research, cite it using:
+
+```bibtex
+@software{agentcertify2026,
+  author = {Mariam Zakaria},
+  title = {AgentCertify: A Statistical Uncertainty & Conformal Risk Control Runtime Framework for LLM Agents},
+  year = {2026},
+  url = {[https://pypi.org/project/agentcertify/](https://pypi.org/project/agentcertify/)}
+}
+```
+
+---
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
